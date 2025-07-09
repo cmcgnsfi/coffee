@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Coffee Water Calculator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      max-width: 900px;
+    }
+    input[type='range'] {
+      width: 300px;
+    }
+    .result {
+      margin-top: 20px;
+      font-size: 1.2em;
+    }
+    #graphContainer {
+      margin-top: 30px;
+      width: 100%;
+      max-width: 800px;
+    }
+    canvas {
+      width: 100%;
+      height: auto;
+      border: 1px solid #ccc;
+      background: #fafafa;
+      display: block;
+    }
+    table {
+      margin-top: 20px;
+      border-collapse: collapse;
+      width: 100%;
+    }
+    table, th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+  </style>
+</head>
+<body>
+  <h2>Coffee Water Calculator</h2>
+
+  <p>
+    Saskia (Kirkel) %:
+    <input type="range" id="waterA" value="85" min="80" max="92" step="0.1" oninput="calculate()" />
+    <span id="waterAPercent">86.0</span>%
+    <br />
+    Vittel %: <span id="waterB">14.0</span>%
+  </p>
+
+  <p>
+    Calcium Citrate (mg/L Ca):
+    <input type="range" id="citrate" value="0" min="0" max="30" step="0.1" oninput="calculate()" />
+    <span id="citrateAmount">0.0</span> mg/L
+  </p>
+
+  <p>
+    Magnesium Sulfate (mg/L Mg):
+    <input type="range" id="sulfate" value="0" min="0" max="30" step="0.1" oninput="calculate()" />
+    <span id="sulfateAmount">0.0</span> mg/L
+  </p>
+
+  <div class="result">
+    <p><strong>Alkalinity (HCO₃⁻):</strong> <span id="alkalinity"></span> mg/L</p>
+    <p><strong>Hardness (as CaCO₃):</strong> <span id="hardness"></span> mg/L</p>
+    <p><strong>Total Dissolved Solids (TDS):</strong> <span id="tds"></span> mg/L</p>
+  </div>
+
+  <div id="graphContainer">
+    <canvas id="graph" width="700" height="500"></canvas>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Calcium (Ca²⁺)</th>
+        <th>Magnesium (Mg²⁺)</th>
+        <th>Sodium (Na⁺)</th>
+        <th>Potassium (K⁺)</th>
+        <th>Bicarbonates (HCO₃⁻)</th>
+        <th>Chlorides (Cl⁻)</th>
+        <th>Sulfates (SO₄²⁻)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td id="valCa"></td>
+        <td id="valMg"></td>
+        <td id="valNa"></td>
+        <td id="valK"></td>
+        <td id="valHCO3"></td>
+        <td id="valCl"></td>
+        <td id="valSO4"></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <script>
+    const waterA = { calcium: 3.5, magnesium: 0.87, sodium: 1.3, potassium: 2.3, bicarbonate: 14.4, chloride: 2.6, sulfate: 1.4, tds: 45.07 };
+    const waterB = { calcium: 94, magnesium: 20, sodium: 7.7, potassium: 5, bicarbonate: 248, chloride: 0, sulfate: 120, tds: 494.7 };
+
+    const canvas = document.getElementById('graph');
+    const ctx = canvas.getContext('2d');
+
+    const alkalinityMin = 30, alkalinityMax = 60, hardnessMin = 40, hardnessMax = 70;
+    const padding = 60;
+
+    const references = [
+      { label: 'Specialty Coffee Association', alkalinity: 40, hardness: 59 },
+      { label: 'Pure Coffee Water', alkalinity: 45, hardness: 52 },
+      { label: 'Barista Hustle', alkalinity: 40, hardness: 61 },
+      { label: 'World of Coffee Budapest', alkalinity: 40, hardness: 50 },
+    ];
+
+    function setupCanvas() {
+      const container = document.getElementById('graphContainer');
+      const styleWidth = container.clientWidth;
+      const styleHeight = styleWidth * 500 / 700;
+      canvas.style.width = styleWidth + 'px';
+      canvas.style.height = styleHeight + 'px';
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = styleWidth * dpr;
+      canvas.height = styleHeight * dpr;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+    }
+
+    function mapX(value) {
+      return padding + ((value - alkalinityMin) / (alkalinityMax - alkalinityMin)) * (canvas.clientWidth - 2 * padding);
+    }
+
+    function mapY(value) {
+      return canvas.clientHeight - padding - ((value - hardnessMin) / (hardnessMax - hardnessMin)) * (canvas.clientHeight - 2 * padding);
+    }
+
+    function drawPolygon() {
+      const points = [ [35, 40], [35, 70], [55, 70], [55, 50] ];
+      ctx.fillStyle = '#ddd';
+      ctx.beginPath();
+      points.forEach(([x, y], i) => {
+        if (i === 0) ctx.moveTo(mapX(x), mapY(y));
+        else ctx.lineTo(mapX(x), mapY(y));
+      });
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawAxes() {
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      drawPolygon();
+
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.moveTo(padding, padding);
+      ctx.lineTo(padding, canvas.clientHeight - padding);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(padding, canvas.clientHeight - padding);
+      ctx.lineTo(canvas.clientWidth - padding, canvas.clientHeight - padding);
+      ctx.stroke();
+
+      ctx.fillStyle = '#000';
+      ctx.font = '16px Arial';
+
+      ctx.save();
+      ctx.translate(25, canvas.clientHeight / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = 'center';
+      ctx.fillText('Hardness (mg/L as CaCO₃)', 0, 0);
+      ctx.restore();
+
+      ctx.textAlign = 'center';
+      ctx.fillText('Alkalinity (mg/L as HCO₃⁻)', canvas.clientWidth / 2, canvas.clientHeight - 20);
+
+      ctx.font = '12px Arial';
+      ctx.fillStyle = '#555';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+
+      for (let i = 0; i <= 6; i++) {
+        const val = hardnessMin + i * (hardnessMax - hardnessMin) / 6;
+        const y = mapY(val);
+        ctx.beginPath();
+        ctx.moveTo(padding - 6, y);
+        ctx.lineTo(padding, y);
+        ctx.stroke();
+        ctx.fillText(val.toFixed(0), padding - 10, y);
+      }
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      for (let i = 0; i <= 6; i++) {
+        const val = alkalinityMin + i * (alkalinityMax - alkalinityMin) / 6;
+        const x = mapX(val);
+        ctx.beginPath();
+        ctx.moveTo(x, canvas.clientHeight - padding);
+        ctx.lineTo(x, canvas.clientHeight - padding + 6);
+        ctx.stroke();
+        ctx.fillText(val.toFixed(0), x, canvas.clientHeight - padding + 10);
+      }
+
+      ctx.fillStyle = 'blue';
+      ctx.font = '14px Arial';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+
+      references.forEach(({label, alkalinity, hardness}) => {
+        const x = mapX(alkalinity);
+        const y = mapY(hardness);
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillText(label, x + 10, y);
+      });
+    }
+
+    function plotPoint(alk, hard) {
+      drawAxes();
+      ctx.beginPath();
+      ctx.fillStyle = 'red';
+      ctx.arc(mapX(alk), mapY(hard), 7, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function calculate() {
+      const percentA = parseFloat(document.getElementById('waterA').value);
+      const citrateCa = parseFloat(document.getElementById('citrate').value);
+      const sulfateMg = parseFloat(document.getElementById('sulfate').value);
+
+      document.getElementById('waterAPercent').innerText = percentA.toFixed(1);
+      const percentB = 100 - percentA;
+      document.getElementById('waterB').innerText = percentB.toFixed(1);
+      document.getElementById('citrateAmount').innerText = citrateCa.toFixed(1);
+      document.getElementById('sulfateAmount').innerText = sulfateMg.toFixed(1);
+
+      const fA = percentA / 100;
+      const fB = percentB / 100;
+
+      const ca = waterA.calcium * fA + waterB.calcium * fB + citrateCa;
+      const mg = waterA.magnesium * fA + waterB.magnesium * fB + sulfateMg;
+      const na = waterA.sodium * fA + waterB.sodium * fB;
+      const k = waterA.potassium * fA + waterB.potassium * fB;
+      const hco3 = waterA.bicarbonate * fA + waterB.bicarbonate * fB + citrateCa * 1.22;
+      const cl = waterA.chloride * fA + waterB.chloride * fB;
+      const so4 = waterA.sulfate * fA + waterB.sulfate * fB + sulfateMg * 3.0;
+
+      const tds = waterA.tds * fA + waterB.tds * fB + citrateCa * 2.5 + sulfateMg * 2.5;
+      const hardness = (2.5 * ca) + (4.1 * mg);
+
+      document.getElementById('alkalinity').innerText = hco3.toFixed(2);
+      document.getElementById('hardness').innerText = hardness.toFixed(2);
+      document.getElementById('tds').innerText = tds.toFixed(2);
+
+      document.getElementById('valCa').innerText = ca.toFixed(2);
+      document.getElementById('valMg').innerText = mg.toFixed(2);
+      document.getElementById('valNa').innerText = na.toFixed(2);
+      document.getElementById('valK').innerText = k.toFixed(2);
+      document.getElementById('valHCO3').innerText = hco3.toFixed(2);
+      document.getElementById('valCl').innerText = cl.toFixed(2);
+      document.getElementById('valSO4').innerText = so4.toFixed(2);
+
+      plotPoint(hco3, hardness);
+    }
+
+    function init() {
+      setupCanvas();
+      calculate();
+    }
+
+    window.addEventListener('resize', () => { setupCanvas(); calculate(); });
+    init();
+  </script>
+
+</body>
+</html>
