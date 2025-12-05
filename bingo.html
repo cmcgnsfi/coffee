@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animal Bingo</title>
+    <style>
+        /* Global box-sizing for consistent sizing across browsers */
+        * {
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #FF6B6B;
+            --secondary-color: #4ECDC4; /* Teal */
+            --accent-color: #FFE66D;
+            --neutral-bg: #f7f9fc;
+            --card-bg: #ffffff;
+            --success-color: #69db7c; /* Bright Green */
+            --error-color: #ff8787;   /* Soft Red */
+            --text-color: #2d3436;
+            --light-blue: #00a8ff;
+        }
+
+        body {
+            font-family: 'Verdana', 'Segoe UI', sans-serif;
+            background-color: var(--neutral-bg);
+            background-image: radial-gradient(#e0e7ff 2px, transparent 2px);
+            background-size: 30px 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            color: var(--text-color);
+            user-select: none;
+            overflow-x: hidden; /* Prevent scrollbar from confetti */
+        }
+        
+        h1 {
+            color: var(--secondary-color); /* Teal */
+            text-transform: uppercase;     
+            text-shadow: none;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        /* Confetti Canvas */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let clicks pass through */
+            z-index: 50; /* Above grid, below modal */
+        }
+
+        /* Collection Area */
+        .collection-section {
+            width: 100%;
+            max-width: 500px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 15px;
+            border: 2px solid var(--secondary-color);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            text-align: center;
+            position: relative; 
+        }
+
+        .collection-header {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .emoji-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            min-height: 40px;
+            max-height: 120px; 
+            overflow-y: auto;
+            padding: 5px;
+        }
+
+        .collected-emoji {
+            font-size: 2rem;
+            animation: popInEmoji 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: help;
+            transition: transform 0.2s;
+        }
+        
+        .collected-emoji:hover {
+            transform: scale(1.3);
+        }
+
+        /* Animal Info Popup (Tooltip) */
+        #animal-popup {
+            display: none;
+            position: fixed;
+            background: white;
+            /* Teal Border */
+            border: 2px solid var(--secondary-color);
+            border-radius: 10px;
+            padding: 10px 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 200;
+            text-align: center;
+            pointer-events: none; 
+            transform: translate(-50%, -120%); 
+            min-width: 100px;
+        }
+
+        #popup-emoji {
+            font-size: 4rem;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        #popup-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        /* SAFARI FIX: Wrapper handles size, Grid handles layout. 
+           This separation prevents content from stretching the container.
+        */
+        .grid-wrapper {
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 1 / 1;
+            position: relative; /* Anchor for absolute child */
+        }
+
+        .bingo-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 15px;
+            padding: 15px;
+            background-color: var(--secondary-color);
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            transition: opacity 0.3s;
+        }
+
+        .bingo-grid.inactive {
+            opacity: 0.7;
+        }
+        
+        .bingo-grid.inactive .bingo-card {
+            cursor: not-allowed;
+        }
+
+        .bingo-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s, background-color 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+            width: 100%;   
+            height: 100%;  
+        }
+
+        .bingo-card:not(.found):not(.wrong):hover {
+            transform: scale(1.02);
+        }
+
+        .bingo-card:active {
+            transform: scale(0.95);
+        }
+
+        .bingo-card.found {
+            background-color: var(--success-color);
+            color: white;
+            cursor: default;
+            transform: none;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .bingo-card.wrong {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+            background-color: var(--error-color);
+            color: white;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        /* Main Game Buttons */
+        button, select {
+            padding: 12px 24px;
+            font-size: 1.2rem;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.1s, box-shadow 0.2s, background-color 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background-color: white;
+            color: black;
+            border: 1px solid var(--secondary-color);
+            font-family: inherit;
+        }
+
+        button:hover, select:hover {
+            background-color: #f0fdfc;
+        }
+
+        button:active {
+            transform: translateY(2px);
+            box-shadow: none;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: default;
+            box-shadow: none;
+        }
+
+        /* Select Dropdown specific styling */
+        select {
+            padding-right: 40px; /* Space for arrow */
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%234ECDC4%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 15px top 50%;
+            background-size: 12px auto;
+        }
+
+        /* Footer */
+        .footer-controls {
+            margin-top: 30px;
+            font-size: 0.9rem;
+        }
+        
+        /* Reset Button Specific Styles (overrides default button) */
+        #reset-btn {
+            background: none;
+            border: none;
+            color: #999;
+            text-decoration: underline;
+            padding: 5px;
+            font-size: 0.9rem;
+            box-shadow: none;
+            border-radius: 0;
+            width: auto;
+            display: inline;
+        }
+        
+        #reset-btn:hover {
+            color: var(--error-color);
+            background: none;
+        }
+
+        /* Win Overlay */
+        #win-message {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 0 0 1000px rgba(0,0,0,0.5);
+            text-align: center;
+            z-index: 100;
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            max-width: 80%;
+            width: 300px;
+        }
+
+        #win-message h2 {
+            font-size: 3rem;
+            color: var(--success-color);
+            margin: 0 0 10px 0;
+        }
+
+        #win-text {
+            font-size: 1.2rem;
+            margin-bottom: 25px;
+            color: #555;
+            line-height: 1.5;
+        }
+        
+        .new-animal-badge {
+            font-size: 4rem;
+            display: block;
+            margin: 10px auto 0 auto;
+            animation: bounce 1s infinite;
+        }
+
+        .new-animal-name {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--text-color);
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        /* Animations */
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        @keyframes popIn {
+            from { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+        
+        @keyframes popInEmoji {
+            from { transform: scale(0); }
+            to { transform: scale(1); }
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .grid-wrapper { padding: 10px; /* Small buffer on mobile */ }
+            .bingo-grid { gap: 10px; padding: 10px; }
+            .bingo-card { font-size: 1.4rem; border-radius: 8px; }
+            .controls { flex-direction: column; gap: 10px; }
+            select { width: 100%; max-width: 300px; }
+        }
+    </style>
+</head>
+<body>
+    
+    <!-- Canvas for Confetti -->
+    <canvas id="confetti-canvas"></canvas>
+
+    <!-- Popup Tooltip -->
+    <div id="animal-popup">
+        <div id="popup-emoji">🦁</div>
+        <div id="popup-name">Lion</div>
+    </div>
+    
+    <h1>Animal Bingo</h1>
+
+    <!-- Grid Wrapper -->
+    <div class="grid-wrapper">
+        <div class="bingo-grid" id="grid">
+            <!-- Grid items generated by JS -->
+        </div>
+    </div>
+    
+    <!-- Collection Section -->
+    <div class="collection-section">
+        <div class="collection-header">
+            Animal Collection
+        </div>
+        <div class="emoji-container" id="emoji-container">
+            <!-- Collected emojis go here -->
+        </div>
+    </div>
+
+    <div class="controls">
+        <select id="word-bank-select" onchange="startGame()">
+            <option value="sightWords">Basic Sight Words</option>
+            <option value="magicE">Magic E Words</option>
+            <option value="vowelDigraphs">Vowel Digraphs</option>
+            <option value="allWords">All Words</option>
+        </select>
+        <button id="start-btn" onclick="startGame()">New Game</button>
+        <button id="repeat-btn" onclick="repeatWord()">Repeat Word</button>
+    </div>
+    
+    <div class="footer-controls">
+        <button id="reset-btn" onclick="resetCollection()">Reset</button>
+    </div>
+
+    <div id="win-message">
+        <h2>BINGO! 🎉</h2>
+        <div id="win-text"></div>
+        <button onclick="closeWinModal()">Play Again</button>
+    </div>
+
+    <script>
+        // ======================================================
+        // DATA SOURCES
+        // ======================================================
+        
+        const WORD_BANKS = {
+            sightWords: [
+                "the", "of", "and", "a", "to", "in", "is", "you", "that", "it",
+                "he", "was", "for", "on", "are", "as", "with", "his", "they", "at",
+                "be", "this", "have", "from", "or", "one", "had", "by", "word", "but",
+                "not", "what", "all", "were", "we", "when", "your", "can", "said", "there",
+                "use", "an", "each", "which", "she", "do", "how", "their", "if", "will",
+                "up", "other", "about", "out", "many", "then", "them", "these", "so", "some"
+            ],
+            magicE: [
+                "cape", "mane", "tape", "wave", "ape", "cave", "fine", "made", "take", 
+                "save", "home", "five", "bike", "lime", "dive", "slide", "fire", "tire", 
+                "kite", "ride", "hide", "bite", "hole", "bone", "nose", "rose", 
+                "hive", "cake", "safe", "bee", "toe", "pie", "stove", "dime", "file", 
+                "stone", "cane", "cube", "tube"
+            ],
+            vowelDigraphs: [
+                "boat", "goal", "loaf", "soap", "coat", "goat", "road", "toad", "pail", 
+                "tail", "mail", "nail", "sail", "bait", "seal", "seat", "meat", "meal", 
+                "beak", "bead", "read", "eat", "leap", "leaf", "team", "hair", "rain", 
+                "gate", "store", "said", "meet", "see", "queen", "seed", "eel", "teeth", 
+                "sheep", "feet", "weed", "beet", "heel", "deer"
+            ]
+        };
+
+        // Emojis
+        const ANIMAL_POOL = [
+            "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", 
+            "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦", "🐤", "🦆", 
+            "🦅", "🦉", "🦇", "🐺", "🐗", "🐴", "🦄", "🐝", "🐛", "🦋", 
+            "🐌", "🐞", "🐜", "🐢", "🐍", "🦎", "🐙", "🦑", "🦞", "🦀", 
+            "🐠", "🐡", "🐬", "🐳", "🦈", "🐊", "🐅", "🐆", "🦓", "🦍"
+        ];
+
+        // Mapping for Names
+        const ANIMAL_NAMES = {
+            "🐶": "Dog", "🐱": "Cat", "🐭": "Mouse", "🐹": "Hamster", "🐰": "Rabbit", "🦊": "Fox", 
+            "🐻": "Bear", "🐼": "Panda", "🐨": "Koala", "🐯": "Tiger", "🦁": "Lion", "🐮": "Cow", 
+            "🐷": "Pig", "🐸": "Frog", "🐵": "Monkey", "🐔": "Chicken", "🐧": "Penguin", "🐦": "Bird", 
+            "🐤": "Chick", "🦆": "Duck", "🦅": "Eagle", "🦉": "Owl", "🦇": "Bat", "🐺": "Wolf", 
+            "🐗": "Boar", "🐴": "Horse", "🦄": "Unicorn", "🐝": "Bee", "🐛": "Caterpillar", "🦋": "Butterfly",
+            "🐌": "Snail", "🐞": "Ladybug", "🐜": "Ant", "🐢": "Turtle", "🐍": "Snake", "🦎": "Lizard", 
+            "🐙": "Octopus", "🦑": "Squid", "🦞": "Lobster", "🦀": "Crab", "🐠": "Fish", "🐡": "Pufferfish", 
+            "🐬": "Dolphin", "🐳": "Whale", "🦈": "Shark", "🐊": "Crocodile", "🐅": "Tiger", "🐆": "Leopard", 
+            "🦓": "Zebra", "🦍": "Gorilla"
+        };
+
+        // ======================================================
+        // STATE VARIABLES
+        // ======================================================
+        
+        let currentBoardWords = [];
+        let foundStatus = [];
+        let targetWord = "";
+        let isGameActive = false;
+        let speechSynth = window.speechSynthesis;
+        let collectedAnimals = []; // List of collected emojis
+        
+        const winCombos = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Cols
+            [0, 4, 8], [2, 4, 6]             // Diagonals
+        ];
+
+        // DOM Elements
+        const gridEl = document.getElementById('grid');
+        const repeatBtn = document.getElementById('repeat-btn');
+        const winModal = document.getElementById('win-message');
+        const winText = document.getElementById('win-text');
+        const wordBankSelect = document.getElementById('word-bank-select');
+        
+        // Collection Elements
+        const containerEl = document.getElementById('emoji-container');
+        
+        // Popup Elements
+        const popupEl = document.getElementById('animal-popup');
+        const popupEmoji = document.getElementById('popup-emoji');
+        const popupName = document.getElementById('popup-name');
+
+        // ======================================================
+        // COLLECTION LOGIC (Persistence)
+        // ======================================================
+
+        function initCollection() {
+            // Load from storage
+            const saved = localStorage.getItem('bingoCollection');
+            if (saved) {
+                try {
+                    collectedAnimals = JSON.parse(saved);
+                } catch(e) {
+                    console.error("Save data corrupted", e);
+                    collectedAnimals = [];
+                }
+            } else {
+                collectedAnimals = [];
+            }
+            
+            renderCollection();
+        }
+
+        function renderCollection() {
+            containerEl.innerHTML = '';
+            collectedAnimals.forEach(animal => {
+                const span = document.createElement('span');
+                span.className = 'collected-emoji';
+                span.textContent = animal;
+                
+                // Add Hover Logic
+                span.addEventListener('mouseenter', (e) => showPopup(e, animal));
+                span.addEventListener('mouseleave', hidePopup);
+                span.addEventListener('mousemove', (e) => movePopup(e)); // Follow mouse slightly if needed
+                
+                containerEl.appendChild(span);
+            });
+        }
+        
+        // ======================================================
+        // POPUP LOGIC
+        // ======================================================
+        function showPopup(e, emoji) {
+            popupEmoji.textContent = emoji;
+            // Lookup name or default to "Unknown"
+            popupName.textContent = ANIMAL_NAMES[emoji] || "Animal";
+            
+            popupEl.style.display = 'block';
+            updatePopupPosition(e);
+        }
+        
+        function hidePopup() {
+            popupEl.style.display = 'none';
+        }
+        
+        function movePopup(e) {
+            updatePopupPosition(e);
+        }
+        
+        function updatePopupPosition(e) {
+            // Position above the cursor
+            // e.clientX and e.clientY are mouse coordinates
+            // We shift it up by 20px so it's not under the cursor
+            const x = e.clientX;
+            const y = e.clientY - 20;
+            
+            popupEl.style.left = x + 'px';
+            popupEl.style.top = y + 'px';
+        }
+
+        function awardNewAnimal() {
+            // Find animals not yet collected
+            const uncollected = ANIMAL_POOL.filter(a => !collectedAnimals.includes(a));
+            
+            let reward = "";
+            let isNew = false;
+            
+            if (uncollected.length > 0) {
+                // Pick a new one
+                const randomIndex = Math.floor(Math.random() * uncollected.length);
+                reward = uncollected[randomIndex];
+                collectedAnimals.push(reward);
+                isNew = true;
+                
+                // Save to storage
+                localStorage.setItem('bingoCollection', JSON.stringify(collectedAnimals));
+                
+                // Update UI
+                renderCollection();
+            } else {
+                // Fallback if they have everything
+                reward = ANIMAL_POOL[Math.floor(Math.random() * ANIMAL_POOL.length)];
+                isNew = false;
+            }
+            
+            return { emoji: reward, isNew: isNew };
+        }
+        
+        // FIX: Replaced confirm() with a 2-click button state
+        let resetConfirmation = false;
+        function resetCollection() {
+            const btn = document.getElementById('reset-btn');
+            
+            if (!resetConfirmation) {
+                // First click: Ask for confirmation
+                resetConfirmation = true;
+                btn.textContent = "Confirm Reset?";
+                btn.style.color = "var(--error-color)";
+                
+                // Reset text back after 3 seconds if they don't click
+                setTimeout(() => {
+                    resetConfirmation = false;
+                    btn.textContent = "Reset";
+                    btn.style.color = "#999";
+                }, 3000);
+                return;
+            }
+            
+            // Second click: Actually reset
+            collectedAnimals = [];
+            localStorage.removeItem('bingoCollection');
+            renderCollection();
+            
+            // Restore button state
+            resetConfirmation = false;
+            btn.textContent = "Reset";
+            btn.style.color = "#999";
+        }
+
+        // ======================================================
+        // GAME LOGIC
+        // ======================================================
+        
+        function startGame() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            speakWord(""); 
+
+            isGameActive = true;
+            gridEl.classList.remove('inactive'); 
+            
+            foundStatus = new Array(9).fill(false);
+            targetWord = "";
+            winModal.style.display = 'none';
+            repeatBtn.disabled = false;
+            
+            stopConfetti(); // Stop any lingering confetti
+            
+            // 1. Get Selected Bank
+            const selectedBankKey = wordBankSelect.value;
+            let wordList;
+
+            if (selectedBankKey === "allWords") {
+                wordList = [
+                    ...WORD_BANKS.sightWords,
+                    ...WORD_BANKS.magicE,
+                    ...WORD_BANKS.vowelDigraphs
+                ];
+            } else {
+                wordList = WORD_BANKS[selectedBankKey] || WORD_BANKS.sightWords;
+            }
+
+            // 2. Shuffle and Pick
+            const shuffled = [...wordList].sort(() => 0.5 - Math.random());
+            currentBoardWords = shuffled.slice(0, 9);
+
+            // 3. Render
+            renderGrid();
+            setTimeout(nextTurn, 500);
+        }
+
+        function renderGrid() {
+            gridEl.innerHTML = '';
+            currentBoardWords.forEach((word, index) => {
+                const card = document.createElement('div');
+                card.className = 'bingo-card';
+                card.textContent = word;
+                card.dataset.index = index;
+                card.addEventListener('click', () => handleCardClick(index, card));
+                gridEl.appendChild(card);
+            });
+        }
+
+        function nextTurn() {
+            if (!isGameActive) return;
+
+            const availableIndices = foundStatus
+                .map((found, idx) => found ? null : idx)
+                .filter(idx => idx !== null);
+
+            if (availableIndices.length === 0) {
+                gameWin();
+                return;
+            }
+
+            const randomIdx = Math.floor(Math.random() * availableIndices.length);
+            const targetIndex = availableIndices[randomIdx];
+            targetWord = currentBoardWords[targetIndex];
+
+            speakWord(targetWord);
+        }
+
+        function handleCardClick(index, cardEl) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (!isGameActive) return;
+            if (foundStatus[index]) return;
+
+            const clickedWord = currentBoardWords[index];
+
+            if (clickedWord === targetWord) {
+                foundStatus[index] = true;
+                cardEl.classList.add('found');
+                playBeep(600, 100, 'sine');
+                
+                if (checkWin()) {
+                    gameWin();
+                } else {
+                    setTimeout(nextTurn, 1000);
+                }
+            } else {
+                cardEl.classList.add('wrong');
+                playBeep(200, 200, 'sawtooth');
+                setTimeout(() => cardEl.classList.remove('wrong'), 500);
+                setTimeout(() => speakWord(targetWord), 600);
+            }
+        }
+
+        function checkWin() {
+            return winCombos.some(combo => combo.every(index => foundStatus[index]));
+        }
+
+        function gameWin() {
+            isGameActive = false;
+            repeatBtn.disabled = true;
+            gridEl.classList.add('inactive');
+            
+            // 1. Award Animal
+            const result = awardNewAnimal();
+            const animalName = ANIMAL_NAMES[result.emoji] || "Unknown Friend";
+            
+            // 2. Prepare Modal Text
+            let message = ""; 
+            if (result.isNew) {
+                message += `You have a new friend:<br>
+                            <span class="new-animal-badge">${result.emoji}</span>
+                            <span class="new-animal-name">${animalName}</span>`;
+            } else {
+                message += `Great job! Here is a friend:<br>
+                            <span class="new-animal-badge">${result.emoji}</span>
+                            <span class="new-animal-name">${animalName}</span>`;
+            }
+            winText.innerHTML = message;
+
+            // 3. Audio & Visuals
+            playVictoryMelody();
+            startConfetti();
+
+            setTimeout(() => {
+                winModal.style.display = 'block';
+            }, 500);
+        }
+
+        function closeWinModal() {
+            winModal.style.display = 'none';
+            stopConfetti();
+            startGame();
+        }
+
+        function speakWord(text) {
+            if (!speechSynth) return;
+            speechSynth.cancel();
+            if (text === "") return;
+            const utterance = new SpeechSynthesisUtterance(text);
+
+            // Attempt to select Google US English voice
+            const voices = speechSynth.getVoices();
+            const targetVoice = voices.find(v => v.name === "Google US English");
+            if (targetVoice) {
+                utterance.voice = targetVoice;
+            }
+
+            utterance.rate = 0.8; // Slowed down rate
+            utterance.pitch = 1.1;
+            utterance.lang = 'en-US';
+            speechSynth.speak(utterance);
+        }
+
+        function repeatWord() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (isGameActive && targetWord) speakWord(targetWord);
+        }
+
+        // ======================================================
+        // CONFETTI LOGIC (Vanilla JS Canvas)
+        // ======================================================
+        const canvas = document.getElementById("confetti-canvas");
+        const ctx = canvas.getContext("2d");
+        let particles = [];
+        let animationId = null;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                // FIX: Spread starting position vertically above the viewport
+                // to create a continuous stream instead of waves.
+                this.y = Math.random() * -canvas.height; 
+                this.size = Math.random() * 10 + 5;
+                this.speedY = Math.random() * 3 + 2;
+                this.speedX = Math.random() * 2 - 1;
+                this.color = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                this.rotation = Math.random() * 360;
+                this.rotationSpeed = Math.random() * 10 - 5;
+            }
+            update() {
+                this.y += this.speedY;
+                this.x += this.speedX;
+                this.rotation += this.rotationSpeed;
+                if (this.y > canvas.height) {
+                    this.y = -10;
+                    this.x = Math.random() * canvas.width;
+                }
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate((this.rotation * Math.PI) / 180);
+                ctx.fillStyle = this.color;
+                ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+                ctx.restore();
+            }
+        }
+
+        function startConfetti() {
+            resizeCanvas();
+            particles = [];
+            for (let i = 0; i < 150; i++) {
+                particles.push(new Particle());
+            }
+            if (!animationId) animateConfetti();
+        }
+
+        function animateConfetti() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+            animationId = requestAnimationFrame(animateConfetti);
+        }
+
+        function stopConfetti() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // ======================================================
+        // AUDIO & INIT
+        // ======================================================
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playBeep(freq, duration, type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + (duration / 1000));
+            osc.stop(audioCtx.currentTime + (duration / 1000));
+        }
+
+        function playVictoryMelody() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const notes = [523.25, 659.25, 783.99, 1046.50];
+            let time = audioCtx.currentTime;
+            notes.forEach((note, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.frequency.value = note;
+                osc.start(time + (i * 0.15));
+                gain.gain.setValueAtTime(0.1, time + (i * 0.15));
+                gain.gain.exponentialRampToValueAtTime(0.0001, time + (i * 0.15) + 0.3);
+                osc.stop(time + (i * 0.15) + 0.3);
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initCollection(); // Load saved animals
+            startGame();      // Start game
+        });
+    </script>
+</body>
+</html>
